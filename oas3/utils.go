@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/jayvynl/goctl-openapi/constant"
+	"github.com/honeybbq/goctl-openapi/constant"
 )
 
 var (

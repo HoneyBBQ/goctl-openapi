@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/jayvynl/goctl-openapi/constant"
+	"github.com/honeybbq/goctl-openapi/constant"
 	"github.com/zeromicro/go-zero/tools/goctl/api/spec"
 )
 
@@ -45,7 +45,7 @@ func (rp requestParser) parse(
 	embeddedStructs := make([]rawParsedRequest, 0)
 	localParams := make(openapi3.Parameters, 0)
 	localBodySchema := &openapi3.Schema{
-		Type:       openapi3.TypeObject,
+		Type:       TypeObject,
 		Properties: make(openapi3.Schemas),
 	}
 	for _, member := range typ.Members {
@@ -94,7 +94,7 @@ func (rp requestParser) parse(
 
 	params := make(openapi3.Parameters, 0)
 	bodySchema := &openapi3.Schema{
-		Type:        openapi3.TypeObject,
+		Type:        TypeObject,
 		Title:       typ.Name(),
 		Description: strings.Join(typ.Docs, " "),
 		Deprecated:  checkDeprecated(typ.Docs),
@@ -160,7 +160,7 @@ func (rp requestParser) Parse(
 		formBody = true
 		params = make(openapi3.Parameters, len(rpr.params))
 		schema = &openapi3.Schema{
-			Type:        openapi3.TypeObject,
+			Type:        TypeObject,
 			Title:       rpr.schema.Title,
 			Description: rpr.schema.Description,
 			Deprecated:  rpr.schema.Deprecated,

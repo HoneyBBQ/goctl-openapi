@@ -13,12 +13,12 @@ func fillDefault(s *openapi3.SchemaRef, defaultString string) error {
 		v   interface{}
 		err error
 	)
-	switch s.Value.Type {
-	case openapi3.TypeBoolean:
+	switch {
+	case s.Value.Type.Is(openapi3.TypeBoolean):
 		v, err = strconv.ParseBool(defaultString)
-	case openapi3.TypeInteger:
+	case s.Value.Type.Is(openapi3.TypeInteger):
 		v, err = ParseInteger(s.Value.Format, defaultString)
-	case openapi3.TypeNumber:
+	case s.Value.Type.Is(openapi3.TypeNumber):
 		v, err = ParseNumber(s.Value.Format, defaultString)
 	default:
 		v = defaultString
@@ -43,12 +43,12 @@ func fillEnumFromOptions(s *openapi3.SchemaRef, options string) error {
 	opts := strings.Split(options[1:len(options)-1], ",")
 	enum := make([]interface{}, len(opts))
 	for i, opt := range opts {
-		switch s.Value.Type {
-		case openapi3.TypeBoolean:
+		switch {
+		case s.Value.Type.Is(openapi3.TypeBoolean):
 			v, err = strconv.ParseBool(opt)
-		case openapi3.TypeInteger:
+		case s.Value.Type.Is(openapi3.TypeInteger):
 			v, err = ParseInteger(s.Value.Format, opt)
-		case openapi3.TypeNumber:
+		case s.Value.Type.Is(openapi3.TypeNumber):
 			v, err = ParseNumber(s.Value.Format, opt)
 		default:
 			v = opt
@@ -76,19 +76,19 @@ func fillMinMaxFromRange(s *openapi3.SchemaRef, rng string) error {
 		return fmt.Errorf("invalid range value \"%s\"", rng)
 	}
 	if parts[0] != "" {
-		switch s.Value.Type {
-		case openapi3.TypeInteger:
+		switch {
+		case s.Value.Type.Is(openapi3.TypeInteger):
 			min, err = ParseInteger(s.Value.Format, parts[0])
 			if err != nil {
 				return err
 			}
-		case openapi3.TypeNumber:
+		case s.Value.Type.Is(openapi3.TypeNumber):
 			min, err = ParseNumber(s.Value.Format, parts[0])
 			if err != nil {
 				return err
 			}
 		default:
-			return fmt.Errorf("range options is not valid for type \"%s\"", s.Value.Type)
+			return fmt.Errorf("range options is not valid for type \"%v\"", s.Value.Type)
 		}
 		if s.Value.Min == nil || *s.Value.Min < min {
 			s.Value.Min = &min
@@ -98,19 +98,19 @@ func fillMinMaxFromRange(s *openapi3.SchemaRef, rng string) error {
 		}
 	}
 	if parts[1] != "" {
-		switch s.Value.Type {
-		case openapi3.TypeInteger:
+		switch {
+		case s.Value.Type.Is(openapi3.TypeInteger):
 			max, err = ParseInteger(s.Value.Format, parts[1])
 			if err != nil {
 				return err
 			}
-		case openapi3.TypeNumber:
+		case s.Value.Type.Is(openapi3.TypeNumber):
 			max, err = ParseNumber(s.Value.Format, parts[1])
 			if err != nil {
 				return err
 			}
 		default:
-			return fmt.Errorf("range options is not valid for type \"%s\"", s.Value.Type)
+			return fmt.Errorf("range options is not valid for type \"%v\"", s.Value.Type)
 		}
 		if s.Value.Max == nil || *s.Value.Max > max {
 			s.Value.Max = &max

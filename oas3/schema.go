@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/jayvynl/goctl-openapi/constant"
+	"github.com/honeybbq/goctl-openapi/constant"
 	"github.com/pkg/errors"
 	"github.com/zeromicro/go-zero/tools/goctl/api/spec"
 )
@@ -25,7 +25,7 @@ func getSchema(typ string, types map[string]spec.DefineStruct, schemas openapi3.
 
 		return &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:     openapi3.TypeObject,
+				Type:     TypeObject,
 				Nullable: true,
 				AdditionalProperties: openapi3.AdditionalProperties{
 					Schema: valueSchema,
@@ -39,7 +39,7 @@ func getSchema(typ string, types map[string]spec.DefineStruct, schemas openapi3.
 		}
 		return &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:     openapi3.TypeArray,
+				Type:     TypeArray,
 				Nullable: true,
 				Items:    itemSchema,
 			},
@@ -64,7 +64,7 @@ func getSchema(typ string, types map[string]spec.DefineStruct, schemas openapi3.
 		}
 		return &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:     openapi3.TypeArray,
+				Type:     TypeArray,
 				Items:    itemSchema,
 				MinItems: dimension,
 				MaxItems: &dimension,
@@ -85,14 +85,15 @@ func getSchema(typ string, types map[string]spec.DefineStruct, schemas openapi3.
 		return elementSchema, nil
 	}
 
-	var openapiType, openapiFormat string
+	var openapiType string
+	var openapiFormat string
 	switch typ {
 	case "string":
-		openapiType = openapi3.TypeString
+		openapiType = "string"
 	case "int", "int8", "int16", "int32", "int64",
 		"uint", "uint8", "uint16", "uint32", "uint64",
 		"byte", "rune", "uintptr":
-		openapiType = openapi3.TypeInteger
+		openapiType = "integer"
 		switch typ {
 		case "byte":
 			openapiFormat = constant.FormatUint8
@@ -104,16 +105,16 @@ func getSchema(typ string, types map[string]spec.DefineStruct, schemas openapi3.
 			openapiFormat = typ
 		}
 	case "float32", "float64":
-		openapiType = openapi3.TypeNumber
+		openapiType = "number"
 		if typ == "float32" {
 			openapiFormat = constant.FormatFloat
 		} else {
 			openapiFormat = constant.FormatDouble
 		}
 	case "bool":
-		openapiType = openapi3.TypeBoolean
+		openapiType = "boolean"
 	case "interface{}", "any":
-		openapiType = openapi3.TypeString
+		openapiType = "string"
 		openapiFormat = constant.FormatBinary
 	default:
 		if ds, ok := types[typ]; ok {
@@ -123,7 +124,7 @@ func getSchema(typ string, types map[string]spec.DefineStruct, schemas openapi3.
 	}
 	return &openapi3.SchemaRef{
 		Value: &openapi3.Schema{
-			Type:   openapiType,
+			Type:   TypePointer(openapiType),
 			Format: openapiFormat,
 		},
 	}, nil
@@ -137,7 +138,7 @@ func getStructSchema(typ spec.DefineStruct, types map[string]spec.DefineStruct, 
 	embeddedSchemas := make([]*openapi3.SchemaRef, 0)
 	schema := &openapi3.SchemaRef{
 		Value: &openapi3.Schema{
-			Type:        openapi3.TypeObject,
+			Type:        TypeObject,
 			Title:       typ.Name(),
 			Description: strings.Join([]string(typ.Docs), " "),
 			Deprecated:  checkDeprecated(typ.Docs),
@@ -283,9 +284,9 @@ func parseTags(s *openapi3.SchemaRef, tags []*spec.Tag) (bool, bool) {
 					continue
 				}
 				if opt == "dive" {
-					if s.Value.Type == openapi3.TypeArray {
+					if s.Value.Type.Is(openapi3.TypeArray) {
 						s = s.Value.Items
-					} else if s.Value.Type == openapi3.TypeObject {
+					} else if s.Value.Type.Is(openapi3.TypeObject) {
 						if s.Value.AdditionalProperties.Schema == nil {
 							fmt.Printf("invalid validate tag \"dive\" for non map type \"%s\"\n", s.Value.Title)
 							return required, allowEmpty
