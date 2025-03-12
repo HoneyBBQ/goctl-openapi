@@ -3,14 +3,21 @@ syntax = "v1"
 info (
 	title:        "api 文件示例"
 	desc:         "给出尽可能复杂的场景 测试本项目功能"
-	author:       "Lin Zhiwen"
-	email:        "zhiwenlin1116@gmail.com"
-	date:         "2024年03月25日"
+	author:       "HoneyBBQ (原作者: Jayvynl)"
+	email:        "ckr@chenkr.cn"
+	date:         "2025年03月13日"
 	version:      "v1"
 	servers:      "http://localhost/v1,https://localhost/v2"
-	externalDocs: "https://github.com/jayvynl/goctl-openapi"
+	externalDocs: "https://github.com/honeybbq/goctl-openapi"
 	tags:         "foo,bar"
 )
+
+// ErrorResponse 定义统一的错误响应结构
+type ErrorResponse {
+	Code    int    `json:"code"` // 业务错误码
+	Message string `json:"message"` // 错误消息
+	Status  int    `json:"status"` // HTTP状态码
+}
 
 type ResourceID {
 	ID int `path:"id" validate:"required"`
@@ -110,7 +117,7 @@ service Example {
 	@doc (
 		summary:      "Update story book"
 		descripton:   "Update one or multiple story books"
-		externalDocs: "https://github.com/jayvynl/goctl-openapi"
+		externalDocs: "https://github.com/honeybbq/goctl-openapi"
 		servers:      "http://another,https://another"
 	)
 	@handler UpdateStoryBooks
@@ -118,6 +125,9 @@ service Example {
 
 	@doc (
 		tags: "bar"
+		errors: "400,401"
+		error400: "error400"
+		error401: "error401"
 	)
 	@handler ListStoryBook1
 	get /story1/:id (StoryBookFilter) returns ([]StoryBook)

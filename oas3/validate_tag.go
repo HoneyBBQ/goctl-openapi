@@ -65,7 +65,11 @@ func parseValidateOption(s *openapi3.SchemaRef, opt string) error {
 
 		enum := make([]interface{}, len(es))
 		for i, e := range es {
-			v, err := ParseValue(s.Value.Type, s.Value.Format, e)
+			var typeStr string
+			if s.Value.Type != nil && len(*s.Value.Type) > 0 {
+				typeStr = (*s.Value.Type)[0]
+			}
+			v, err := ParseValue(typeStr, s.Value.Format, e)
 			if err != nil {
 				return err
 			}
@@ -73,13 +77,12 @@ func parseValidateOption(s *openapi3.SchemaRef, opt string) error {
 		}
 		s.Value.Enum = enum
 	case "min", "gte", "gt":
-		switch s.Value.Type {
-		case openapi3.TypeInteger, openapi3.TypeNumber:
+		if s.Value.Type.Is(openapi3.TypeInteger) || s.Value.Type.Is(openapi3.TypeNumber) {
 			var (
 				min float64
 				err error
 			)
-			if s.Value.Type == openapi3.TypeInteger {
+			if s.Value.Type.Is(openapi3.TypeInteger) {
 				min, err = ParseInteger(s.Value.Format, value)
 			} else {
 				min, err = ParseNumber(s.Value.Format, value)
@@ -93,7 +96,7 @@ func parseValidateOption(s *openapi3.SchemaRef, opt string) error {
 			} else if *s.Value.Min == min && key == "gt" {
 				s.Value.ExclusiveMin = true
 			}
-		case openapi3.TypeArray, openapi3.TypeString, openapi3.TypeObject:
+		} else if s.Value.Type.Is(openapi3.TypeArray) || s.Value.Type.Is(openapi3.TypeString) || s.Value.Type.Is(openapi3.TypeObject) {
 			v, err := strconv.ParseUint(value, 10, 64)
 			if err != nil {
 				return err
@@ -101,23 +104,21 @@ func parseValidateOption(s *openapi3.SchemaRef, opt string) error {
 			if key == "gt" {
 				v++
 			}
-			switch s.Value.Type {
-			case openapi3.TypeArray:
+			if s.Value.Type.Is(openapi3.TypeArray) {
 				s.Value.MinItems = v
-			case openapi3.TypeString:
+			} else if s.Value.Type.Is(openapi3.TypeString) {
 				s.Value.MinLength = v
-			case openapi3.TypeObject:
+			} else if s.Value.Type.Is(openapi3.TypeObject) {
 				s.Value.MinProps = v
 			}
 		}
 	case "max", "lte", "lt":
-		switch s.Value.Type {
-		case openapi3.TypeInteger, openapi3.TypeNumber:
+		if s.Value.Type.Is(openapi3.TypeInteger) || s.Value.Type.Is(openapi3.TypeNumber) {
 			var (
 				max float64
 				err error
 			)
-			if s.Value.Type == openapi3.TypeInteger {
+			if s.Value.Type.Is(openapi3.TypeInteger) {
 				max, err = ParseInteger(s.Value.Format, value)
 			} else {
 				max, err = ParseNumber(s.Value.Format, value)
@@ -131,7 +132,7 @@ func parseValidateOption(s *openapi3.SchemaRef, opt string) error {
 			} else if *s.Value.Max == max && key == "lt" {
 				s.Value.ExclusiveMax = true
 			}
-		case openapi3.TypeArray, openapi3.TypeString, openapi3.TypeObject:
+		} else if s.Value.Type.Is(openapi3.TypeArray) || s.Value.Type.Is(openapi3.TypeString) || s.Value.Type.Is(openapi3.TypeObject) {
 			v, err := strconv.ParseUint(value, 10, 64)
 			if err != nil {
 				return err
@@ -139,27 +140,25 @@ func parseValidateOption(s *openapi3.SchemaRef, opt string) error {
 			if key == "lt" {
 				v--
 			}
-			switch s.Value.Type {
-			case openapi3.TypeArray:
+			if s.Value.Type.Is(openapi3.TypeArray) {
 				s.Value.MaxItems = &v
-			case openapi3.TypeString:
+			} else if s.Value.Type.Is(openapi3.TypeString) {
 				s.Value.MaxLength = &v
-			case openapi3.TypeObject:
+			} else if s.Value.Type.Is(openapi3.TypeObject) {
 				s.Value.MaxProps = &v
 			}
 		}
 	case "len", "eq":
-		typ := s.Value.Type
-		if typ == openapi3.TypeInteger || typ == openapi3.TypeNumber || (typ == openapi3.TypeString && key == "eq") {
+		if s.Value.Type.Is(openapi3.TypeInteger) || s.Value.Type.Is(openapi3.TypeNumber) || (s.Value.Type.Is(openapi3.TypeString) && key == "eq") {
 			var (
 				v   float64
 				e   interface{}
 				err error
 			)
-			if typ == openapi3.TypeInteger {
+			if s.Value.Type.Is(openapi3.TypeInteger) {
 				v, err = ParseInteger(s.Value.Format, value)
 				e = v
-			} else if typ == openapi3.TypeNumber {
+			} else if s.Value.Type.Is(openapi3.TypeNumber) {
 				v, err = ParseNumber(s.Value.Format, value)
 				e = v
 			} else {
@@ -169,15 +168,15 @@ func parseValidateOption(s *openapi3.SchemaRef, opt string) error {
 				return err
 			}
 			s.Value.Enum = []interface{}{e}
-		} else if typ == openapi3.TypeArray || typ == openapi3.TypeObject || (typ == openapi3.TypeString && key == "len") {
+		} else if s.Value.Type.Is(openapi3.TypeArray) || s.Value.Type.Is(openapi3.TypeObject) || (s.Value.Type.Is(openapi3.TypeString) && key == "len") {
 			v, err := strconv.ParseUint(value, 10, 64)
 			if err != nil {
 				return err
 			}
-			if typ == openapi3.TypeArray {
+			if s.Value.Type.Is(openapi3.TypeArray) {
 				s.Value.MinItems = v
 				s.Value.MaxItems = &v
-			} else if typ == openapi3.TypeObject {
+			} else if s.Value.Type.Is(openapi3.TypeObject) {
 				s.Value.MinProps = v
 				s.Value.MaxProps = &v
 			} else {

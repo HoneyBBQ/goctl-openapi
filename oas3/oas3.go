@@ -1,7 +1,24 @@
+// Copyright 2023 The goctl-openapi Authors
+// Fork from https://github.com/honeybbq/goctl-openapi
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package oas3
 
 import (
+	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -10,8 +27,15 @@ import (
 )
 
 var DefaultResponseDesc = "A successful response."
+var DefaultErrorDesc = "Error response."
 
-func GetDoc(p *plugin.Plugin) (*openapi3.T, error) {
+// Define a default error response structure
+type DefaultErrorResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func GetDoc(p *plugin.Plugin, errorType string) (*openapi3.T, error) {
 	doc := &openapi3.T{
 		OpenAPI:      "3.0.3",
 		Components:   newComponents(),
@@ -32,8 +56,223 @@ func GetDoc(p *plugin.Plugin) (*openapi3.T, error) {
 			types[ds.Name()] = ds
 		}
 	}
-	fillPaths(p, doc, types, doc.Components.RequestBodies, doc.Components.Responses, doc.Components.Schemas)
+
+	// Process unified error response body
+	errorSchema := createErrorResponseSchema(errorType, types, doc.Components.Schemas)
+	if errorSchema != nil {
+		// Add error response to components
+		doc.Components.Responses["Error"] = &openapi3.ResponseRef{
+			Value: &openapi3.Response{
+				Description: &DefaultErrorDesc,
+				Content: openapi3.Content{
+					"application/json": &openapi3.MediaType{
+						Schema: errorSchema,
+					},
+				},
+			},
+		}
+	}
+
+	fillPaths(p, doc, types, doc.Components.RequestBodies, doc.Components.Responses, doc.Components.Schemas, errorSchema)
 	return doc, nil
+}
+
+// Create error response schema
+func createErrorResponseSchema(errorType string, types map[string]spec.DefineStruct, schemas openapi3.Schemas) *openapi3.SchemaRef {
+	if errorType == "" {
+		// If no error type is provided, return default error structure
+		return &openapi3.SchemaRef{
+			Value: &openapi3.Schema{
+				Type: TypeObject,
+				Properties: openapi3.Schemas{
+					"code": &openapi3.SchemaRef{
+						Value: &openapi3.Schema{
+							Type:    TypeInteger,
+							Example: 400,
+						},
+					},
+					"message": &openapi3.SchemaRef{
+						Value: &openapi3.Schema{
+							Type:    TypeString,
+							Example: "Error message",
+						},
+					},
+				},
+				Required: []string{"code", "message"},
+			},
+		}
+	}
+
+	// Try to parse error type as JSON
+	var jsonSchema map[string]interface{}
+	if err := json.Unmarshal([]byte(errorType), &jsonSchema); err == nil {
+		// Successfully parsed JSON, create corresponding schema
+		return createSchemaFromJSON(jsonSchema)
+	}
+
+	// Not JSON, try to find the type in API definition
+	if ds, ok := types[errorType]; ok {
+		return getStructSchema(ds, types, schemas)
+	}
+
+	// If specified type is not found, return default error structure
+	return &openapi3.SchemaRef{
+		Value: &openapi3.Schema{
+			Type: TypeObject,
+			Properties: openapi3.Schemas{
+				"code": &openapi3.SchemaRef{
+					Value: &openapi3.Schema{
+						Type:    TypeInteger,
+						Example: 400,
+					},
+				},
+				"message": &openapi3.SchemaRef{
+					Value: &openapi3.Schema{
+						Type:    TypeString,
+						Example: "Error message",
+					},
+				},
+			},
+			Required: []string{"code", "message"},
+		},
+	}
+}
+
+// Create schema from JSON
+func createSchemaFromJSON(jsonObj map[string]interface{}) *openapi3.SchemaRef {
+	schema := &openapi3.Schema{
+		Type:       TypeObject,
+		Properties: make(openapi3.Schemas),
+	}
+
+	for key, value := range jsonObj {
+		var propSchema *openapi3.SchemaRef
+
+		switch v := value.(type) {
+		case string:
+			propSchema = &openapi3.SchemaRef{
+				Value: &openapi3.Schema{
+					Type:    TypeString,
+					Example: v,
+				},
+			}
+		case float64:
+			// In JSON, all numbers are float64
+			if v == float64(int(v)) {
+				propSchema = &openapi3.SchemaRef{
+					Value: &openapi3.Schema{
+						Type:    TypeInteger,
+						Example: int(v),
+					},
+				}
+			} else {
+				propSchema = &openapi3.SchemaRef{
+					Value: &openapi3.Schema{
+						Type:    TypeNumber,
+						Example: v,
+					},
+				}
+			}
+		case bool:
+			propSchema = &openapi3.SchemaRef{
+				Value: &openapi3.Schema{
+					Type:    TypeBoolean,
+					Example: v,
+				},
+			}
+		case map[string]interface{}:
+			propSchema = createSchemaFromJSON(v)
+		case []interface{}:
+			if len(v) > 0 {
+				// Get array element type
+				itemSchema := createItemSchemaFromJSON(v[0])
+				propSchema = &openapi3.SchemaRef{
+					Value: &openapi3.Schema{
+						Type:  TypeArray,
+						Items: itemSchema,
+					},
+				}
+			} else {
+				propSchema = &openapi3.SchemaRef{
+					Value: &openapi3.Schema{
+						Type:  TypeArray,
+						Items: nil,
+					},
+				}
+			}
+		default:
+			propSchema = &openapi3.SchemaRef{
+				Value: &openapi3.Schema{
+					Type: TypeObject,
+				},
+			}
+		}
+
+		schema.Properties[key] = propSchema
+		schema.Required = append(schema.Required, key)
+	}
+
+	return &openapi3.SchemaRef{Value: schema}
+}
+
+// 从JSON数组元素创建Schema
+func createItemSchemaFromJSON(item interface{}) *openapi3.SchemaRef {
+	switch v := item.(type) {
+	case string:
+		return &openapi3.SchemaRef{
+			Value: &openapi3.Schema{
+				Type:    TypeString,
+				Example: v,
+			},
+		}
+	case float64:
+		if v == float64(int(v)) {
+			return &openapi3.SchemaRef{
+				Value: &openapi3.Schema{
+					Type:    TypeInteger,
+					Example: int(v),
+				},
+			}
+		} else {
+			return &openapi3.SchemaRef{
+				Value: &openapi3.Schema{
+					Type:    TypeNumber,
+					Example: v,
+				},
+			}
+		}
+	case bool:
+		return &openapi3.SchemaRef{
+			Value: &openapi3.Schema{
+				Type:    TypeBoolean,
+				Example: v,
+			},
+		}
+	case map[string]interface{}:
+		return createSchemaFromJSON(v)
+	case []interface{}:
+		if len(v) > 0 {
+			itemSchema := createItemSchemaFromJSON(v[0])
+			return &openapi3.SchemaRef{
+				Value: &openapi3.Schema{
+					Type:  TypeArray,
+					Items: itemSchema,
+				},
+			}
+		} else {
+			return &openapi3.SchemaRef{
+				Value: &openapi3.Schema{
+					Type: TypeArray,
+				},
+			}
+		}
+	default:
+		return &openapi3.SchemaRef{
+			Value: &openapi3.Schema{
+				Type: TypeObject,
+			},
+		}
+	}
 }
 
 func newComponents() *openapi3.Components {
@@ -57,6 +296,7 @@ func fillPaths(
 	requests openapi3.RequestBodies, // request body references
 	responses openapi3.ResponseBodies, // response body references
 	schemas openapi3.Schemas, // schema references, json field of struct type will read and write this map
+	errorSchema *openapi3.SchemaRef, // 错误返回体Schema
 ) {
 	rp := newRequestParser()
 
@@ -121,6 +361,76 @@ func fillPaths(
 				servers = &ss
 			}
 
+			// Collect all response options
+			responseOptions := []openapi3.NewResponsesOption{
+				openapi3.WithStatus(http.StatusOK, response),
+			}
+
+			// Check if specific error codes are defined in the API documentation
+			errorsProperty := GetProperty(route.AtDoc.Properties, "errors")
+
+			// Store already added error codes to avoid duplicates
+			processedErrorCodes := make(map[int]bool)
+
+			// Add error responses
+			if errorSchema != nil {
+				errorResponse := &openapi3.ResponseRef{
+					Ref: "#/components/responses/Error",
+				}
+
+				// If specific error codes are defined in @doc annotation, use only these error codes
+				if errorsProperty != "" {
+					// Parse error codes list, format like: "400,401,404,500"
+					errorCodes := strings.Split(errorsProperty, ",")
+
+					// First add all specified error codes
+					for _, code := range errorCodes {
+						code = strings.TrimSpace(code)
+						statusCode, err := strconv.Atoi(code)
+						if err == nil && statusCode >= 100 && statusCode < 600 {
+							if !processedErrorCodes[statusCode] {
+								responseOptions = append(responseOptions,
+									openapi3.WithStatus(statusCode, errorResponse))
+								processedErrorCodes[statusCode] = true
+							}
+						}
+					}
+
+					// Then process descriptions for specific error codes
+					for _, code := range errorCodes {
+						code = strings.TrimSpace(code)
+						errorDescKey := "error" + code
+						errorDesc := GetProperty(route.AtDoc.Properties, errorDescKey)
+
+						if errorDesc != "" {
+							statusCode, err := strconv.Atoi(code)
+							if err == nil && statusCode >= 100 && statusCode < 600 {
+								// Create error response with custom description
+								customDesc := errorDesc
+								customErrorResponse := &openapi3.ResponseRef{
+									Value: &openapi3.Response{
+										Description: &customDesc,
+										Content: openapi3.Content{
+											"application/json": &openapi3.MediaType{
+												Schema: errorSchema,
+											},
+										},
+									},
+								}
+
+								// Override with custom description for the same status code
+								responseOptions = append(responseOptions,
+									openapi3.WithStatus(statusCode, customErrorResponse))
+								processedErrorCodes[statusCode] = true
+							}
+						}
+					}
+				}
+			}
+
+			// Create response object
+			responses := openapi3.NewResponses(responseOptions...)
+
 			doc.AddOperation(
 				ConvertPath(route.Path),
 				method,
@@ -131,7 +441,7 @@ func fillPaths(
 					OperationID:  route.Handler,
 					Parameters:   params,
 					RequestBody:  request,
-					Responses:    openapi3.NewResponses(openapi3.WithStatus(http.StatusOK, response)),
+					Responses:    responses,
 					Security:     security,
 					Servers:      servers,
 					ExternalDocs: getExternalDocs(route.AtDoc.Properties),

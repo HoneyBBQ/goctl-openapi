@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/jayvynl/goctl-openapi/constant"
+	"github.com/honeybbq/goctl-openapi/constant"
 )
 
 func getInfo(properties map[string]string) *openapi3.Info {
