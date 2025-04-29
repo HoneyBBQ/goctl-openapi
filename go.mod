@@ -5,9 +5,9 @@ go 1.23.0
 toolchain go1.24.0
 
 require (
-	github.com/getkin/kin-openapi v0.129.0
+	github.com/getkin/kin-openapi v0.131.0
 	github.com/pkg/errors v0.9.1
-	github.com/zeromicro/go-zero/tools/goctl v1.8.1
+	github.com/zeromicro/go-zero/tools/goctl v1.8.2
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -27,9 +27,9 @@ require (
 	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	github.com/zeromicro/antlr v0.0.1 // indirect
-	github.com/zeromicro/go-zero v1.8.1 // indirect
-	golang.org/x/sys v0.31.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
+	github.com/zeromicro/antlr v1.0.0 // indirect
+	github.com/zeromicro/go-zero v1.8.2 // indirect
+	golang.org/x/sys v0.32.0 // indirect
+	golang.org/x/text v0.24.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
