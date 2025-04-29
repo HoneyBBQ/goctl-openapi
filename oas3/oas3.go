@@ -26,7 +26,7 @@ import (
 	"github.com/zeromicro/go-zero/tools/goctl/plugin"
 )
 
-var DefaultResponseDesc = "A successful response."
+var DefaultResponseDesc = "Successful response."
 var DefaultErrorDesc = "Error response."
 
 // Define a default error response structure
@@ -45,10 +45,7 @@ func GetDoc(p *plugin.Plugin, errorType string) (*openapi3.T, error) {
 		ExternalDocs: getExternalDocs(p.Api.Info.Properties),
 	}
 
-	doc.Components.SecuritySchemes["jwt"] = &openapi3.SecuritySchemeRef{
-		Value: openapi3.NewJWTSecurityScheme(),
-	}
-	doc.Security = []openapi3.SecurityRequirement{{"jwt": []string{}}}
+	// 所有安全方案都在扫描API定义时动态添加
 
 	types := make(map[string]spec.DefineStruct) // all defined types from api spec
 	for _, typ := range p.Api.Types {
@@ -300,8 +297,40 @@ func fillPaths(
 ) {
 	rp := newRequestParser()
 
+	// 记录已经添加的安全方案
+	addedSecuritySchemes := make(map[string]bool)
+
 	service := p.Api.Service.JoinPrefix()
 	for _, group := range service.Groups {
+		// 检查组中是否使用了JWT认证
+		if group.Annotation.Properties["jwt"] != "" {
+			// 如果还没添加JWT安全方案，添加它
+			if !addedSecuritySchemes["jwt"] {
+				doc.Components.SecuritySchemes["jwt"] = &openapi3.SecuritySchemeRef{
+					Value: openapi3.NewJWTSecurityScheme(),
+				}
+				addedSecuritySchemes["jwt"] = true
+			}
+		}
+
+		// 检查组中是否使用了Cookie认证
+		if cookieAuth := group.Annotation.Properties["cookie"]; cookieAuth != "" {
+			if cookieAuth == "Auth" {
+				// 使用默认cookie名称"session"
+				if !addedSecuritySchemes["cookieAuth"] {
+					doc.Components.SecuritySchemes["cookieAuth"] = createCookieSecurityScheme("session")
+					addedSecuritySchemes["cookieAuth"] = true
+				}
+			} else {
+				// 使用自定义cookie名称
+				cookieAuthName := "cookieAuth_" + cookieAuth
+				if !addedSecuritySchemes[cookieAuthName] {
+					doc.Components.SecuritySchemes[cookieAuthName] = createCookieSecurityScheme(cookieAuth)
+					addedSecuritySchemes[cookieAuthName] = true
+				}
+			}
+		}
+
 		for _, route := range group.Routes {
 			method := strings.ToUpper(route.Method)
 			hasBody := method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch
@@ -352,8 +381,20 @@ func fillPaths(
 			}
 
 			var security *openapi3.SecurityRequirements
-			if group.Annotation.Properties["jwt"] != "" {
+			if jwtAuth := group.Annotation.Properties["jwt"]; jwtAuth != "" {
 				security = &openapi3.SecurityRequirements{{"jwt": []string{}}}
+			}
+
+			// Check for cookie authentication (cookie: Auth 格式)
+			if cookieAuth := group.Annotation.Properties["cookie"]; cookieAuth != "" {
+				if cookieAuth == "Auth" {
+					// 使用默认cookie名称"session"
+					security = &openapi3.SecurityRequirements{{"cookieAuth": []string{}}}
+				} else {
+					// 使用自定义cookie名称(格式: cookie: 自定义名称)
+					cookieAuthName := "cookieAuth_" + cookieAuth
+					security = &openapi3.SecurityRequirements{{cookieAuthName: []string{}}}
+				}
 			}
 
 			var servers *openapi3.Servers
@@ -425,6 +466,27 @@ func fillPaths(
 							}
 						}
 					}
+				} else {
+					// 如果没有定义特定的错误码，则添加常见的错误状态码
+					// 常见的客户端错误
+					clientErrors := []int{400, 401, 403, 404, 422}
+					for _, code := range clientErrors {
+						if !processedErrorCodes[code] {
+							responseOptions = append(responseOptions,
+								openapi3.WithStatus(code, errorResponse))
+							processedErrorCodes[code] = true
+						}
+					}
+
+					// 常见的服务器错误
+					serverErrors := []int{500, 502, 503, 504}
+					for _, code := range serverErrors {
+						if !processedErrorCodes[code] {
+							responseOptions = append(responseOptions,
+								openapi3.WithStatus(code, errorResponse))
+							processedErrorCodes[code] = true
+						}
+					}
 				}
 			}
 
@@ -448,5 +510,23 @@ func fillPaths(
 				},
 			)
 		}
+	}
+}
+
+// createCookieSecurityScheme 创建基于Cookie的API密钥认证方案
+// 根据OpenAPI 3.0规范，Cookie认证是apiKey类型的一种特殊形式
+// 参数:
+//   - cookieName: Cookie的名称，当客户端请求API时需要在Cookie中包含该名称的值
+//
+// 返回:
+//   - 一个OpenAPI安全方案引用，类型为apiKey，位置为cookie
+func createCookieSecurityScheme(cookieName string) *openapi3.SecuritySchemeRef {
+	return &openapi3.SecuritySchemeRef{
+		Value: &openapi3.SecurityScheme{
+			Type:        "apiKey",
+			In:          "cookie",
+			Name:        cookieName,
+			Description: "API key authentication using HTTP cookie",
+		},
 	}
 }

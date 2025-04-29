@@ -65,11 +65,7 @@ func parseValidateOption(s *openapi3.SchemaRef, opt string) error {
 
 		enum := make([]interface{}, len(es))
 		for i, e := range es {
-			var typeStr string
-			if s.Value.Type != nil && len(*s.Value.Type) > 0 {
-				typeStr = (*s.Value.Type)[0]
-			}
-			v, err := ParseValue(typeStr, s.Value.Format, e)
+			v, err := ParseValueFromType(s.Value.Type, s.Value.Format, e)
 			if err != nil {
 				return err
 			}

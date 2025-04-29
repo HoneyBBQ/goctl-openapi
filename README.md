@@ -45,7 +45,7 @@ Usage goctl-openapi:
 Usage example.
 
 ```shell
-goctl api plugin -plugin 'goctl-openapi -pretty -format yaml -filename exmaple.yaml' -api example.api -dir docs 
+goctl api plugin -plugin 'goctl-openapi -pretty -format yaml -filename exmaple.yaml  -errorType ErrorResponse' -api example.api -dir docs 
 ```
 
 Take the api file from [example](https://github.com/honeybbq/goctl-openapi/blob/main/example/example.api), [the generated openapi file](https://github.com/honeybbq/goctl-openapi/blob/main/example/openapi.json) can be visualized by [swagger editor](https://editor.swagger.io/?url=https://raw.githubusercontent.com/jayvynl/goctl-openapi/main/example/openapi.json).
@@ -57,7 +57,7 @@ You can use the `-errorType` parameter to set a unified error response format fo
 1. Using a type name defined in the API file:
 
 ```shell
-goctl api plugin -p goctl-openapi -api user.api -dir . -errorType ErrorResponse
+goctl api plugin -p goctl-openapi -api user.api -dir .
 ```
 
 Where `ErrorResponse` is a type defined in the API file:
@@ -125,4 +125,158 @@ post /users (CreateUserRequest) returns (CreateUserResponse)
 
 This provides descriptive text for each error code in the generated OpenAPI document, helping API consumers understand possible error situations.
 
-If an endpoint doesn't define a specific `errors` property but the `-errorType` parameter is set, the default set of error codes will be used.
+#### Default Error Status Codes
+
+If an endpoint doesn't define a specific `errors` property but the `-errorType` parameter is set, the following default error status codes will be automatically added:
+
+- Client Errors: 400 (Bad Request), 401 (Unauthorized), 403 (Forbidden), 404 (Not Found), 422 (Unprocessable Entity)
+- Server Errors: 500 (Internal Server Error), 502 (Bad Gateway), 503 (Service Unavailable), 504 (Gateway Timeout)
+
+This ensures that your API documentation includes the most common error scenarios without requiring you to explicitly define them for each endpoint. You can still override these defaults by specifying your own set of error codes in the `errors` property.
+
+Example:
+
+```go
+// This will use the default error status codes (400, 401, 403, 404, 422, 500, 502, 503, 504)
+@handler GetUser
+get /users/:id returns (UserResponse)
+
+// This will only use the specified error codes (401, 404)
+@doc (
+    errors: "401,404"
+)
+@handler GetUserCustom
+get /users/custom/:id returns (UserResponse)
+```
+
+### Authentication
+
+The plugin supports multiple authentication mechanisms that align with the OpenAPI 3.0 security schemes. Security schemes are only added to the OpenAPI document when explicitly declared in your API definition file.
+
+#### JWT Authentication
+
+To enable JWT Bearer authentication for a group of API endpoints, use the `jwt` property in the `@server` annotation:
+
+```go
+@server (
+    jwt:    Auth
+    prefix: /api
+    group:  example
+)
+service ExampleService {
+    // Your API endpoints here...
+}
+```
+
+This generates an OpenAPI security scheme of type `http` with scheme `bearer` and bearerFormat `JWT`.
+
+#### Cookie-Session Authentication
+
+For web applications using Cookie-Session authentication, use the `cookie` property:
+
+```go
+@server (
+    cookie: Auth
+    prefix: /api
+    group:  example
+)
+service ExampleService {
+    // Your API endpoints here...
+}
+```
+
+This generates an OpenAPI security scheme of type `apiKey` with `in: cookie` and `name: session`.
+
+#### Custom Cookie Name
+
+You can also specify a custom cookie name for cookie-based authentication:
+
+```go
+@server (
+    cookie: SessionID
+    prefix: /api
+    group:  example
+)
+service ExampleService {
+    // Your API endpoints here...
+}
+```
+
+This will use "SessionID" as the cookie name for authentication instead of the default "session".
+
+#### Multiple Authentication Types
+
+You can use different authentication methods for different endpoint groups within the same API:
+
+```go
+// Public endpoints with no authentication
+@server (
+    prefix: /api/public
+    group:  public
+)
+service ExampleService {
+    @handler Health
+    get /health
+}
+
+// JWT authenticated endpoints
+@server (
+    jwt:    Auth
+    prefix: /api/admin
+    group:  admin
+)
+service ExampleService {
+    @handler AdminData
+    get /data
+}
+
+// Cookie authenticated endpoints
+@server (
+    cookie: Auth
+    prefix: /api/user
+    group:  user
+)
+service ExampleService {
+    @handler UserProfile
+    get /profile
+}
+```
+
+The generated OpenAPI document will include only the security schemes that are actually used in your API definition, making the specification more accurate and concise.
+
+#### Example Security Schemes in OpenAPI Output
+
+For an API that uses both JWT and Cookie authentication, the generated OpenAPI JSON would include security schemes like this:
+
+```json
+{
+  "components": {
+    "securitySchemes": {
+      "jwt": {
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "cookieAuth": {
+        "description": "API key authentication using HTTP cookie",
+        "in": "cookie",
+        "name": "session",
+        "type": "apiKey"
+      }
+    }
+  }
+}
+```
+
+#### Using the Generated API Documentation
+
+The security schemes defined in the OpenAPI document are recognized by Swagger UI and other OpenAPI tools. This allows:
+
+1. Frontend developers to understand the authentication requirements for each endpoint
+2. API clients to be automatically generated with proper authentication handling
+3. API testing tools like Postman to automatically include the required authentication headers/cookies
+
+For testing Cookie authentication in Swagger UI, you'll need to:
+1. Authenticate through your application's login endpoint first
+2. Allow the browser to store the authentication cookie
+3. Swagger UI will then automatically include this cookie in subsequent requests

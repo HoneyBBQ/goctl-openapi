@@ -92,6 +92,16 @@ func ParseValue(typ string, format string, s string) (interface{}, error) {
 	}
 }
 
+// ParseValueFromType parses value based on schema type pointer
+func ParseValueFromType(typ *openapi3.Types, format string, s string) (interface{}, error) {
+	if typ == nil || len(*typ) == 0 {
+		return s, nil
+	}
+
+	typeStr := (*typ)[0]
+	return ParseValue(typeStr, format, s)
+}
+
 func ParseInteger(format string, s string) (float64, error) {
 	var bits int
 
